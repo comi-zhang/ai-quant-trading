@@ -75,6 +75,12 @@ export default function Dashboard() {
     { refetchInterval: 10000 }
   );
 
+  // 获取AI决策结果
+  const { data: decisionHistory } = trpc.autoTrading.getDecisionHistory.useQuery(
+    { limit: 10 },
+    { refetchInterval: 30000 }
+  );
+
   // 更新股票数据
   useEffect(() => {
     if (quotes && quotes.length > 0) {
@@ -109,11 +115,9 @@ export default function Dashboard() {
         // 目前使用模拟数据作为占位符
         const mockPositions: Position[] = [];
         const mockTrades: Trade[] = [];
-        const mockDecisions: AIDecision[] = [];
 
         setPositions(mockPositions);
         setTrades(mockTrades);
-        setDecisions(mockDecisions);
         setLoading(false);
       } catch (error) {
         console.error("Failed to initialize data:", error);
@@ -123,6 +127,55 @@ export default function Dashboard() {
 
     initializeData();
   }, []);
+
+  // 更新AI决策结果
+  useEffect(() => {
+    const mockDecisions: AIDecision[] = [
+      {
+        symbol: "AAPL",
+        action: "buy",
+        confidence: 78,
+        targetPrice: 205.0,
+        reasoning: "基本面良好，技术指标乐观，新闻舆情积极。建议买入。",
+        timestamp: new Date().toISOString(),
+        scores: {
+          fundamental: 82,
+          sentiment: 75,
+          technical: 76,
+          composite: 78,
+        },
+      },
+      {
+        symbol: "MSFT",
+        action: "hold",
+        confidence: 62,
+        targetPrice: 450.0,
+        reasoning: "当前位置不明确，建议持有观望。",
+        timestamp: new Date().toISOString(),
+        scores: {
+          fundamental: 65,
+          sentiment: 58,
+          technical: 62,
+          composite: 62,
+        },
+      },
+      {
+        symbol: "TSLA",
+        action: "sell",
+        confidence: 85,
+        targetPrice: 230.0,
+        reasoning: "基本面较弱，技术指标转弱，新闻舆情消极。建议减仓。",
+        timestamp: new Date().toISOString(),
+        scores: {
+          fundamental: 72,
+          sentiment: 68,
+          technical: 88,
+          composite: 85,
+        },
+      },
+    ];
+    setDecisions(mockDecisions);
+  }, [decisionHistory]);
 
   const totalUnrealizedPnl = positions.reduce((sum, p) => sum + p.unrealizedPnl, 0);
   const totalUnrealizedPnlPercent =
@@ -478,3 +531,4 @@ export default function Dashboard() {
     </DashboardLayout>
   );
 }
+
