@@ -135,12 +135,12 @@ export default function Trading() {
           {/* 下单表单 */}
           <div className="lg:col-span-1">
             <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Place Order</h3>
+              <h3 className="text-lg font-semibold mb-4">下单</h3>
 
               <div className="space-y-4">
                 {/* 股票代码 */}
                 <div>
-                  <Label htmlFor="symbol">Symbol</Label>
+                  <Label htmlFor="symbol">股票代码</Label>
                   <Select value={form.symbol} onValueChange={(value) => setForm({ ...form, symbol: value })}>
                     <SelectTrigger id="symbol">
                       <SelectValue />
@@ -157,21 +157,21 @@ export default function Trading() {
 
                 {/* 买卖方向 */}
                 <div>
-                  <Label htmlFor="side">Side</Label>
+                  <Label htmlFor="side">买卖方向</Label>
                   <Select value={form.side} onValueChange={(value: any) => setForm({ ...form, side: value })}>
                     <SelectTrigger id="side">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="buy">Buy</SelectItem>
-                      <SelectItem value="sell">Sell</SelectItem>
+                      <SelectItem value="buy">买入</SelectItem>
+                      <SelectItem value="sell">卖出</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {/* 订单类型 */}
                 <div>
-                  <Label htmlFor="orderType">Order Type</Label>
+                  <Label htmlFor="orderType">订单类型</Label>
                   <Select
                     value={form.orderType}
                     onValueChange={(value: any) => setForm({ ...form, orderType: value })}
@@ -180,43 +180,43 @@ export default function Trading() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="market">Market</SelectItem>
-                      <SelectItem value="limit">Limit</SelectItem>
+                      <SelectItem value="market">市价单</SelectItem>
+                      <SelectItem value="limit">限价单</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {/* 数量 */}
                 <div>
-                  <Label htmlFor="quantity">Quantity</Label>
+                  <Label htmlFor="quantity">数量</Label>
                   <Input
                     id="quantity"
                     type="number"
                     min="1"
                     value={form.quantity}
                     onChange={(e) => setForm({ ...form, quantity: parseInt(e.target.value) || 0 })}
-                    placeholder="Enter quantity"
+                    placeholder="输入数量"
                   />
                 </div>
 
                 {/* 限价单价格 */}
                 {form.orderType === "limit" && (
                   <div>
-                    <Label htmlFor="price">Limit Price</Label>
+                    <Label htmlFor="price">限价</Label>
                     <Input
                       id="price"
                       type="number"
                       step="0.01"
                       value={form.price || ""}
                       onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || undefined })}
-                      placeholder="Enter limit price"
+                      placeholder="输入限价"
                     />
                   </div>
                 )}
 
                 {/* 有效期 */}
                 <div>
-                  <Label htmlFor="timeInForce">Time in Force</Label>
+                  <Label htmlFor="timeInForce">有效期</Label>
                   <Select
                     value={form.timeInForce}
                     onValueChange={(value: any) => setForm({ ...form, timeInForce: value })}
@@ -225,8 +225,8 @@ export default function Trading() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="day">Day</SelectItem>
-                      <SelectItem value="gtc">GTC (Good Till Cancelled)</SelectItem>
+                      <SelectItem value="day">当日有效</SelectItem>
+                      <SelectItem value="gtc">撤销前有效</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -236,17 +236,17 @@ export default function Trading() {
                   onClick={handleSubmitOrder}
                   className={`w-full ${form.side === "buy" ? "bg-positive" : "bg-negative"}`}
                 >
-                  {form.side === "buy" ? "Buy" : "Sell"} {form.quantity} {form.symbol}
+                  {form.side === "buy" ? "买入" : "卖出"} {form.quantity} {form.symbol}
                 </Button>
               </div>
 
               {/* 风险提示 */}
-              <div className="mt-6 p-3 bg-warning/10 border border-warning rounded-lg">
+                <div className="mt-6 p-3 bg-warning/10 border border-warning rounded-lg">
                 <div className="flex gap-2">
                   <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
                   <div className="text-sm text-warning">
-                    <p className="font-semibold">Risk Warning</p>
-                    <p className="mt-1">Always use stop loss and take profit orders to manage risk.</p>
+                    <p className="font-semibold">风险警告</p>
+                    <p className="mt-1">请始终使用止损和止盈单来管理风险。</p>
                   </div>
                 </div>
               </div>
@@ -257,17 +257,17 @@ export default function Trading() {
           <div className="lg:col-span-2">
             <Tabs defaultValue="active" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="active">Active Orders</TabsTrigger>
-                <TabsTrigger value="history">Order History</TabsTrigger>
+                <TabsTrigger value="active">活跃订单</TabsTrigger>
+                <TabsTrigger value="history">订单历史</TabsTrigger>
               </TabsList>
 
               {/* 活跃订单 */}
               <TabsContent value="active" className="space-y-4">
                 <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Active Orders</h3>
+                  <h3 className="text-lg font-semibold mb-4">活跃订单</h3>
 
                   {orders.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-8">No active orders</p>
+                    <p className="text-muted-foreground text-center py-8">暂无活跃订单</p>
                   ) : (
                     <div className="space-y-3">
                       {orders
@@ -290,7 +290,7 @@ export default function Trading() {
                                   {order.side.toUpperCase()}
                                 </span>
                                 <span className="text-xs text-muted-foreground">
-                                  {order.orderType === "market" ? "Market" : `Limit $${order.price.toFixed(2)}`}
+                                  {order.orderType === "market" ? "市价单" : `限价 $${order.price.toFixed(2)}`}
                                 </span>
                               </div>
                               <p className="text-sm text-muted-foreground">
@@ -300,24 +300,24 @@ export default function Trading() {
 
                             <div className="flex items-center gap-4">
                               <div className="text-right">
-                                <div className="text-sm text-muted-foreground">Status</div>
+                                <div className="text-sm text-muted-foreground">状态</div>
                                 <div className="flex items-center gap-1 font-semibold">
                                   {order.status === "pending" && (
                                     <>
                                       <Clock className="w-4 h-4 text-warning" />
-                                      <span className="text-warning">Pending</span>
+                                      <span className="text-warning">待成交</span>
                                     </>
                                   )}
                                   {order.status === "filled" && (
                                     <>
                                       <CheckCircle className="w-4 h-4 text-positive" />
-                                      <span className="text-positive">Filled</span>
+                                      <span className="text-positive">已成交</span>
                                     </>
                                   )}
                                   {order.status === "partial" && (
                                     <>
                                       <Clock className="w-4 h-4 text-warning" />
-                                      <span className="text-warning">Partial</span>
+                                      <span className="text-warning">部分成交</span>
                                     </>
                                   )}
                                 </div>
@@ -330,7 +330,7 @@ export default function Trading() {
                                   onClick={() => handleCancelOrder(order.id)}
                                   className="text-negative hover:text-negative"
                                 >
-                                  Cancel
+                                  撤销
                                 </Button>
                               )}
                             </div>
@@ -344,22 +344,22 @@ export default function Trading() {
               {/* 订单历史 */}
               <TabsContent value="history" className="space-y-4">
                 <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Order History</h3>
+                  <h3 className="text-lg font-semibold mb-4">订单历史</h3>
 
                   {orders.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-8">No order history</p>
+                    <p className="text-muted-foreground text-center py-8">暂无订单历史</p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th>Date</th>
-                            <th>Symbol</th>
-                            <th>Side</th>
-                            <th>Type</th>
-                            <th>Quantity</th>
-                            <th>Price</th>
-                            <th>Status</th>
+                            <th>时间</th>
+                            <th>股票</th>
+                            <th>方向</th>
+                            <th>类型</th>
+                            <th>数量</th>
+                            <th>价格</th>
+                            <th>状态</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -371,10 +371,10 @@ export default function Trading() {
                                 <span
                                   className={order.side === "buy" ? "price-up" : "price-down"}
                                 >
-                                  {order.side.toUpperCase()}
+                                  {order.side === "buy" ? "买入" : "卖出"}
                                 </span>
                               </td>
-                              <td>{order.orderType === "market" ? "Market" : "Limit"}</td>
+                              <td>{order.orderType === "market" ? "市价" : "限价"}</td>
                               <td>{order.quantity}</td>
                               <td>${order.price.toFixed(2)}</td>
                               <td>

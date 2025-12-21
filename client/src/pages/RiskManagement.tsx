@@ -145,28 +145,28 @@ export default function RiskManagement() {
         {/* 主要内容 */}
         <Tabs defaultValue="config" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="config">Risk Configuration</TabsTrigger>
-            <TabsTrigger value="backtest">Backtest Results</TabsTrigger>
-            <TabsTrigger value="equity">Equity Curve</TabsTrigger>
+            <TabsTrigger value="config">风险配置</TabsTrigger>
+            <TabsTrigger value="backtest">回测结果</TabsTrigger>
+            <TabsTrigger value="equity">资金曲线</TabsTrigger>
           </TabsList>
 
           {/* 风险配置 */}
           <TabsContent value="config" className="space-y-4">
             <Card className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold">Risk Parameters</h3>
+                <h3 className="text-lg font-semibold">风险参数</h3>
                 <Button
                   onClick={() => setIsEditing(!isEditing)}
                   variant={isEditing ? "outline" : "default"}
                 >
-                  {isEditing ? "Cancel" : "Edit"}
+                  {isEditing ? "取消" : "编辑"}
                 </Button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* 交易限额 */}
                 <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-muted-foreground">Trading Limits</h4>
+                  <h4 className="font-semibold text-sm text-muted-foreground">交易限额</h4>
 
                   <div>
                     <Label htmlFor="maxLossPerTrade">Max Loss Per Trade ($)</Label>
@@ -210,7 +210,7 @@ export default function RiskManagement() {
 
                 {/* 持仓限额 */}
                 <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-muted-foreground">Position Limits</h4>
+                  <h4 className="font-semibold text-sm text-muted-foreground">持仓限额</h4>
 
                   <div>
                     <Label htmlFor="maxPositionSize">Max Position Size ($)</Label>
@@ -260,7 +260,7 @@ export default function RiskManagement() {
 
                 {/* 止损止盈 */}
                 <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-muted-foreground">Stop Loss & Take Profit</h4>
+                  <h4 className="font-semibold text-sm text-muted-foreground">止损止盈</h4>
 
                   <div>
                     <Label htmlFor="stopLossPercent">Stop Loss (%)</Label>
@@ -299,7 +299,7 @@ export default function RiskManagement() {
 
                 {/* 风险提示 */}
                 <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-muted-foreground">Risk Alerts</h4>
+                  <h4 className="font-semibold text-sm text-muted-foreground">风险提醒</h4>
                   <div className="p-4 bg-warning/10 border border-warning rounded-lg">
                     <div className="flex gap-2">
                       <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0" />
@@ -320,11 +320,11 @@ export default function RiskManagement() {
 
               {isEditing && (
                 <div className="flex gap-2 mt-6">
-                  <Button onClick={handleSaveConfig} className="bg-positive">
-                    Save Configuration
+                    <Button onClick={handleSaveConfig} className="bg-positive">
+                    保存配置
                   </Button>
                   <Button onClick={() => setIsEditing(false)} variant="outline">
-                    Cancel
+                    取消
                   </Button>
                 </div>
               )}
@@ -334,20 +334,20 @@ export default function RiskManagement() {
           {/* 回测结果 */}
           <TabsContent value="backtest" className="space-y-4">
             <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Strategy Backtest Results</h3>
+              <h3 className="text-lg font-semibold mb-4">策略回测结果</h3>
 
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Symbol</th>
-                      <th>Total Return</th>
-                      <th>Return %</th>
-                      <th>Win Rate</th>
-                      <th>Profit Factor</th>
-                      <th>Max Drawdown</th>
-                      <th>Sharpe Ratio</th>
-                      <th>Trades</th>
+                      <th>股票</th>
+                      <th>总收益</th>
+                      <th>收益率</th>
+                      <th>胜率</th>
+                      <th>盈亏比</th>
+                      <th>最大回撤</th>
+                      <th>Sharpe比率</th>
+                      <th>交易数</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -388,21 +388,21 @@ export default function RiskManagement() {
               {/* 回测解释 */}
               <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 bg-card border border-border rounded-lg">
-                  <h4 className="font-semibold text-sm mb-2">Win Rate</h4>
+                  <h4 className="font-semibold text-sm mb-2">胜率</h4>
                   <p className="text-xs text-muted-foreground">
-                    Percentage of profitable trades. Higher is better, typically 50%+ is good.
+                    盘利交易的比例。越高越好，通常 50%+ 是不错的。
                   </p>
                 </div>
                 <div className="p-4 bg-card border border-border rounded-lg">
-                  <h4 className="font-semibold text-sm mb-2">Profit Factor</h4>
+                  <h4 className="font-semibold text-sm mb-2">盈亏比</h4>
                   <p className="text-xs text-muted-foreground">
-                    Ratio of gross profit to gross loss. Above 1.5 is considered good.
+                    汛利与亏损的比率。超过 1.5 为不错。
                   </p>
                 </div>
                 <div className="p-4 bg-card border border-border rounded-lg">
-                  <h4 className="font-semibold text-sm mb-2">Sharpe Ratio</h4>
+                  <h4 className="font-semibold text-sm mb-2">Sharpe比率</h4>
                   <p className="text-xs text-muted-foreground">
-                    Risk-adjusted return. Above 1.0 is good, above 2.0 is excellent.
+                    风险调整后的收益。超过 1.0 为不错，超过 2.0 是优秀。
                   </p>
                 </div>
               </div>
@@ -412,7 +412,7 @@ export default function RiskManagement() {
           {/* 资金曲线 */}
           <TabsContent value="equity" className="space-y-4">
             <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Equity Curve (Last 21 Days)</h3>
+              <h3 className="text-lg font-semibold mb-4">资金曲线（最运21天）</h3>
 
               <ResponsiveContainer width="100%" height={400}>
                 <LineChart data={mockEquityCurve}>
