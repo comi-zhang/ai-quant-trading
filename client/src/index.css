@@ -76,6 +76,11 @@
   --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
   --sidebar-border: oklch(0.92 0.004 286.32);
   --sidebar-ring: oklch(0.623 0.214 259.815);
+  /* Finance-specific colors */
+  --positive: oklch(0.6 0.2 142); /* Green for gains */
+  --negative: oklch(0.6 0.2 27); /* Red for losses */
+  --neutral: oklch(0.55 0.1 286); /* Gray for neutral */
+  --warning: oklch(0.65 0.2 70); /* Amber for warnings */
 }
 
 .dark {
@@ -111,6 +116,11 @@
   --sidebar-accent-foreground:  oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.488 0.243 264.376);
+  /* Finance-specific colors for dark theme */
+  --positive: oklch(0.72 0.2 142); /* Bright green for gains */
+  --negative: oklch(0.65 0.2 27); /* Bright red for losses */
+  --neutral: oklch(0.6 0.1 286); /* Lighter gray for neutral */
+  --warning: oklch(0.75 0.2 70); /* Bright amber for warnings */
 }
 
 @layer base {
@@ -158,6 +168,65 @@
   .flex {
     min-height: 0;
     min-width: 0;
+  }
+
+  /* Finance-specific components */
+  .price-up {
+    @apply font-semibold;
+    color: hsl(var(--positive));
+  }
+
+  .price-down {
+    @apply font-semibold;
+    color: hsl(var(--negative));
+  }
+
+  .stat-card {
+    @apply rounded-lg border border-border bg-card p-6 shadow-sm transition-all hover:shadow-md;
+  }
+
+  .stat-label {
+    @apply text-sm font-medium text-muted-foreground;
+  }
+
+  .stat-value {
+    @apply mt-2 text-3xl font-bold text-foreground;
+  }
+
+  .stat-change {
+    @apply mt-2 text-sm font-medium;
+  }
+
+  .stat-change.positive {
+    color: hsl(var(--positive));
+  }
+
+  .stat-change.negative {
+    color: hsl(var(--negative));
+  }
+
+  .chart-container {
+    @apply rounded-lg border border-border bg-card p-6;
+  }
+
+  .data-table {
+    @apply w-full;
+  }
+
+  .data-table thead {
+    @apply border-b border-border;
+  }
+
+  .data-table th {
+    @apply px-4 py-3 text-left text-sm font-semibold text-muted-foreground;
+  }
+
+  .data-table td {
+    @apply px-4 py-3 text-sm;
+  }
+
+  .data-table tbody tr {
+    @apply border-b border-border/50 transition-colors hover:bg-card/50;
   }
 
   @media (min-width: 640px) {
