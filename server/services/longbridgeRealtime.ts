@@ -87,7 +87,7 @@ export async function getRealTimeQuote(symbol: string): Promise<RealTimeQuote | 
 /**
  * 批量获取多个股票的实时报价
  * @param symbols 股票代码数组
- * @returns 报价数据数组
+ * @returns 实时报价数组
  */
 export async function getRealTimeQuotes(symbols: string[]): Promise<RealTimeQuote[]> {
   try {
@@ -96,40 +96,16 @@ export async function getRealTimeQuotes(symbols: string[]): Promise<RealTimeQuot
       return [];
     }
 
-    const response = await axios.get(`${LONGBRIDGE_API_URL}/v1/quote`, {
-      headers: {
-        Authorization: `Bearer ${ENV.longbridgeAccessToken}`,
-        "Content-Type": "application/json",
-      },
-      params: {
-        symbol: symbols.join(","),
-        include_ask_bid: true,
-      },
-      timeout: 10000,
-    });
+    const quotes: RealTimeQuote[] = [];
 
-    const dataArray = Array.isArray(response.data) ? response.data : [response.data];
+    for (const symbol of symbols) {
+      const quote = await getRealTimeQuote(symbol);
+      if (quote) {
+        quotes.push(quote);
+      }
+    }
 
-    return dataArray
-      .map((data: any) => {
-        const symbol = data.symbol || "";
-        const lastPrice = parseFloat(data.last_done) || 0;
-        const openPrice = parseFloat(data.open) || 0;
-        const prevClose = parseFloat(data.prev_close) || openPrice;
-
-        return {
-          symbol,
-          lastPrice,
-          openPrice,
-          highPrice: parseFloat(data.high) || 0,
-          lowPrice: parseFloat(data.low) || 0,
-          volume: parseInt(data.volume) || 0,
-          timestamp: Date.now(),
-          change: lastPrice - prevClose,
-          changePercent: prevClose > 0 ? ((lastPrice - prevClose) / prevClose) * 100 : 0,
-        };
-      })
-      .filter((q) => q.symbol);
+    return quotes;
   } catch (error) {
     console.error("[Longbridge] Failed to get quotes:", error);
     return [];
@@ -139,13 +115,13 @@ export async function getRealTimeQuotes(symbols: string[]): Promise<RealTimeQuot
 /**
  * 获取K线数据
  * @param symbol 股票代码
- * @param period K线周期 (day, week, month, 1m, 5m, 15m, 30m, 60m)
- * @param limit 返回数据条数
+ * @param period 时间周期 (day, week, month, 1m, 5m, 15m, 30m, 60m)
+ * @param limit 限制数量
  * @returns K线数据数组
  */
 export async function getKlineData(
   symbol: string,
-  period: "day" | "week" | "month" | "1m" | "5m" | "15m" | "30m" | "60m" = "day",
+  period: string = "day",
   limit: number = 100
 ): Promise<KlineBar[]> {
   try {
@@ -228,13 +204,39 @@ export async function getAccountAssets() {
       timeout: 5000,
     });
 
-    const data = response.data;
+    const responseData = response.data;
+    console.log("[Longbridge] Account response:", JSON.stringify(responseData, null, 2));
+
+    // 检查响应结构
+    if (!responseData || !responseData.data || !responseData.data.list || responseData.data.list.length === 0) {
+      console.error("[Longbridge] Invalid response structure:", responseData);
+      return null;
+    }
+
+    const accountData = responseData.data.list[0];
+
+    // 获取USD币种的现金信息（如果有多个币种）
+    let availableCash = 0;
+    let currency = "USD";
+
+    if (accountData.cash_infos && Array.isArray(accountData.cash_infos)) {
+      // 优先查找USD，其次查找HKD
+      const usdInfo = accountData.cash_infos.find((info: any) => info.currency === "USD");
+      const hkdInfo = accountData.cash_infos.find((info: any) => info.currency === "HKD");
+      const cashInfo = usdInfo || hkdInfo || accountData.cash_infos[0];
+
+      if (cashInfo) {
+        availableCash = parseFloat(cashInfo.available_cash) || 0;
+        currency = cashInfo.currency || "USD";
+      }
+    }
+
     return {
-      totalAssets: parseFloat(data.total_cash) || 0,
-      availableCash: parseFloat(data.available_cash) || 0,
-      marketValue: parseFloat(data.market_value) || 0,
-      buyingPower: parseFloat(data.buying_power) || 0,
-      currency: data.currency || "USD",
+      totalAssets: parseFloat(accountData.total_cash) || 0,
+      availableCash: availableCash,
+      marketValue: parseFloat(accountData.net_assets) || 0,
+      buyingPower: parseFloat(accountData.buy_power) || 0,
+      currency: currency,
     };
   } catch (error) {
     console.error("[Longbridge] Failed to get account assets:", error);
