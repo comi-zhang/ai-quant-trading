@@ -28,6 +28,10 @@ interface KlineBar {
 }
 
 const LONGBRIDGE_API_URL = "https://openapi.longportapp.com";
+const LONGBRIDGE_QUOTE_URL = "https://openapi.longportapp.com/v1/quote";
+const LONGBRIDGE_ACCOUNT_URL = "https://openapi.longportapp.com/v1/asset/account";
+const LONGBRIDGE_POSITIONS_URL = "https://openapi.longportapp.com/v1/position";
+const LONGBRIDGE_ORDERS_URL = "https://openapi.longportapp.com/v1/order/orders";
 
 /**
  * 获取实时股票报价
@@ -190,7 +194,7 @@ export async function getAccountPositions() {
       return [];
     }
 
-    const response = await axios.get(`${LONGBRIDGE_API_URL}/v1/asset/account`, {
+    const response = await axios.get(LONGBRIDGE_ACCOUNT_URL, {
       headers: {
         Authorization: `Bearer ${ENV.longbridgeAccessToken}`,
         "Content-Type": "application/json",
@@ -216,7 +220,7 @@ export async function getAccountAssets() {
       return null;
     }
 
-    const response = await axios.get(`${LONGBRIDGE_API_URL}/v1/asset/account`, {
+    const response = await axios.get(LONGBRIDGE_ACCOUNT_URL, {
       headers: {
         Authorization: `Bearer ${ENV.longbridgeAccessToken}`,
         "Content-Type": "application/json",
