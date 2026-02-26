@@ -31,8 +31,8 @@ interface GeminiDecision {
   timestamp: string;
 }
 
-const GEMINI_API_URL = ENV.geminiApiUrl || "https://gemini.ystone.top";
-const GEMINI_API_KEY = ENV.geminiApiKey || "hajimi";
+const GEMINI_API_URL = ENV.geminiApiUrl;
+const GEMINI_API_KEY = ENV.geminiApiKey;
 
 /**
  * 构建分析提示词

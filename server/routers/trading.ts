@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { publicProcedure, router } from "../_core/trpc";
+import { protectedProcedure, router } from "../_core/trpc";
 import {
   submitMarketOrder,
   submitLimitOrder,
@@ -11,23 +11,24 @@ import {
 
 export const tradingRouter = router({
   /**
-   * 提交市价单
+   * 提交市价单 - 需要认证
    */
-  submitMarketOrder: publicProcedure
+  submitMarketOrder: protectedProcedure
     .input(
       z.object({
-        symbol: z.string(),
-        quantity: z.number().positive(),
+        symbol: z.string().min(1).max(10), // 股票代码长度限制
+        quantity: z.number().positive().int().max(1000000), // 数量限制
         side: z.enum(["buy", "sell"]),
       })
     )
     .mutation(async ({ input }) => {
-      const order = await submitMarketOrder(input.symbol, input.quantity, input.side);
-      return (
-        order || {
-          orderId: "",
-          symbol: input.symbol,
-          quantity: input.quantity,
+      try {
+        const order = await submitMarketOrder(input.symbol, input.quantity, input.side);
+        return (
+          order || {
+            orderId: "",
+            symbol: input.symbol,
+            quantity: input.quantity,
           price: 0,
           side: input.side,
           status: "rejected" as const,
@@ -40,26 +41,27 @@ export const tradingRouter = router({
     }),
 
   /**
-   * 提交限价单
+   * 提交限价单 - 需要认证
    */
-  submitLimitOrder: publicProcedure
+  submitLimitOrder: protectedProcedure
     .input(
       z.object({
-        symbol: z.string(),
-        quantity: z.number().positive(),
-        price: z.number().positive(),
+        symbol: z.string().min(1).max(10),
+        quantity: z.number().positive().int().max(1000000),
+        price: z.number().positive().max(1000000),
         side: z.enum(["buy", "sell"]),
       })
     )
     .mutation(async ({ input }) => {
-      const order = await submitLimitOrder(
-        input.symbol,
-        input.quantity,
-        input.price,
-        input.side
-      );
-      return (
-        order || {
+      try {
+        const order = await submitLimitOrder(
+          input.symbol,
+          input.quantity,
+          input.price,
+          input.side
+        );
+        return (
+          order || {
           orderId: "",
           symbol: input.symbol,
           quantity: input.quantity,
@@ -75,14 +77,15 @@ export const tradingRouter = router({
     }),
 
   /**
-   * 查询订单状态
+   * 查询订单状态 - 需要认证
    */
-  getOrderStatus: publicProcedure
-    .input(z.object({ orderId: z.string() }))
+  getOrderStatus: protectedProcedure
+    .input(z.object({ orderId: z.string().min(1).max(50) }))
     .query(async ({ input }) => {
-      const order = await getOrderStatus(input.orderId);
-      return (
-        order || {
+      try {
+        const order = await getOrderStatus(input.orderId);
+        return (
+          order || {
           orderId: input.orderId,
           symbol: "",
           quantity: 0,
@@ -98,45 +101,56 @@ export const tradingRouter = router({
     }),
 
   /**
-   * 撤销订单
+   * 撤销订单 - 需要认证
    */
-  cancelOrder: publicProcedure
-    .input(z.object({ orderId: z.string() }))
+  cancelOrder: protectedProcedure
+    .input(z.object({ orderId: z.string().min(1).max(50) }))
     .mutation(async ({ input }) => {
-      const success = await cancelOrder(input.orderId);
-      return { success, orderId: input.orderId };
+      try {
+        const success = await cancelOrder(input.orderId);
+        return { success, orderId: input.orderId };
+      } catch (error) {
+        console.error("[Trading] Failed to cancel order:", error);
+        return { success: false, orderId: input.orderId, error: "撤销失败" };
+      }
     }),
 
   /**
-   * 获取所有订单
+   * 获取所有订单 - 需要认证
    */
-  getAllOrders: publicProcedure.query(async () => {
-    const orders = await getAllOrders();
-    return orders;
+  getAllOrders: protectedProcedure.query(async () => {
+    try {
+      const orders = await getAllOrders();
+      return orders;
+    } catch (error) {
+      console.error("[Trading] Failed to get orders:", error);
+      return [];
+    }
   }),
 
   /**
-   * 执行自动交易
+   * 执行自动交易 - 需要认证
    */
-  executeAutoTrade: publicProcedure
+  executeAutoTrade: protectedProcedure
     .input(
       z.object({
-        symbol: z.string(),
+        symbol: z.string().min(1).max(10),
         action: z.enum(["buy", "sell"]),
-        quantity: z.number().positive(),
-        targetPrice: z.number().positive().optional(),
+        quantity: z.number().positive().int().max(1000000),
+        targetPrice: z.number().positive().max(1000000).optional(),
         useMarketOrder: z.boolean().default(false),
       })
     )
     .mutation(async ({ input }) => {
-      const order = await executeAutoTrade(
-        input.symbol,
-        input.action,
-        input.quantity,
-        input.targetPrice,
-        input.useMarketOrder
-      );
-      return (
+      try {
+        const order = await executeAutoTrade(
+          input.symbol,
+          input.action,
+          input.quantity,
+          input.targetPrice,
+          input.useMarketOrder
+        );
+        return (
         order || {
           orderId: "",
           symbol: input.symbol,

@@ -205,7 +205,10 @@ export async function getAccountAssets() {
     });
 
     const responseData = response.data;
-    console.log("[Longbridge] Account response:", JSON.stringify(responseData, null, 2));
+    // 调试日志，生产环境应移除
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[Longbridge] Account response:", JSON.stringify(responseData, null, 2));
+    }
 
     // 检查响应结构
     if (!responseData || !responseData.data || !responseData.data.list || responseData.data.list.length === 0) {
