@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { trpc } from "@/lib/trpc";
 import { AlertCircle, CheckCircle, Clock } from "lucide-react";
 import { useState } from "react";
 
@@ -52,34 +53,52 @@ export default function Trading() {
     timeInForce: "day",
   });
 
-  const [orders, setOrders] = useState<Order[]>([
-    {
-      id: "1",
-      symbol: "AAPL",
-      side: "buy",
-      orderType: "market",
-      quantity: 100,
-      price: 185.0,
-      status: "filled",
-      filledQuantity: 100,
-      averagePrice: 185.0,
-      timestamp: "2025-12-21 10:30:00",
-    },
-    {
-      id: "2",
-      symbol: "MSFT",
-      side: "sell",
-      orderType: "limit",
-      quantity: 50,
-      price: 450.0,
-      status: "pending",
-      filledQuantity: 0,
-      averagePrice: 0,
-      timestamp: "2025-12-21 14:15:00",
-    },
-  ]);
+  // 从长桥API获取订单列表
+  const { data: ordersData, isLoading: ordersLoading, refetch: refetchOrders } = trpc.trading.getAllOrders.useQuery(
+    undefined,
+    { refetchInterval: 10000 }
+  );
+
+  // 转换API数据格式
+  const orders: Order[] = ordersData?.map((order: any) => ({
+    id: order.orderId || String(Math.random()),
+    symbol: order.symbol,
+    side: order.side,
+    orderType: order.price && order.price > 0 ? "limit" : "market",
+    quantity: order.quantity,
+    price: order.price || order.filledPrice || 0,
+    status: order.status || "pending",
+    filledQuantity: order.filledQuantity || 0,
+    averagePrice: order.filledPrice || 0,
+    timestamp: order.timestamp ? new Date(order.timestamp).toLocaleString() : new Date().toLocaleString(),
+  })) || [];
 
   const [orderHistory, setOrderHistory] = useState<Order[]>([]);
+
+  // 提交订单 mutation
+  const submitOrderMutation = trpc.trading.submitMarketOrder.useMutation({
+    onSuccess: () => {
+      refetchOrders();
+      alert(`订单提交成功: ${form.side.toUpperCase()} ${form.quantity} ${form.symbol}`);
+      setForm({
+        symbol: "AAPL",
+        side: "buy",
+        orderType: "market",
+        quantity: 10,
+        timeInForce: "day",
+      });
+    },
+    onError: (error) => {
+      alert(`订单提交失败: ${error.message}`);
+    },
+  });
+
+  // 撤销订单 mutation
+  const cancelOrderMutation = trpc.trading.cancelOrder.useMutation({
+    onSuccess: () => {
+      refetchOrders();
+    },
+  });
 
   const handleSubmitOrder = () => {
     // 验证表单
@@ -93,39 +112,21 @@ export default function Trading() {
       return;
     }
 
-    // 创建新订单
-    const newOrder: Order = {
-      id: String(orders.length + 1),
-      symbol: form.symbol,
-      side: form.side,
-      orderType: form.orderType,
-      quantity: form.quantity,
-      price: form.price || 0,
-      status: "pending",
-      filledQuantity: 0,
-      averagePrice: 0,
-      timestamp: new Date().toLocaleString(),
-    };
-
-    setOrders([newOrder, ...orders]);
-    alert(`Order submitted: ${form.side.toUpperCase()} ${form.quantity} ${form.symbol}`);
-
-    // 重置表单
-    setForm({
-      symbol: "AAPL",
-      side: "buy",
-      orderType: "market",
-      quantity: 10,
-      timeInForce: "day",
-    });
+    // 调用API提交订单
+    if (form.orderType === "market") {
+      submitOrderMutation.mutate({
+        symbol: form.symbol,
+        quantity: form.quantity,
+        side: form.side,
+      });
+    } else {
+      // 限价单逻辑（需要添加新的mutation）
+      alert("限价单功能待实现");
+    }
   };
 
   const handleCancelOrder = (orderId: string) => {
-    setOrders(
-      orders.map((order) =>
-        order.id === orderId ? { ...order, status: "cancelled" as const } : order
-      )
-    );
+    cancelOrderMutation.mutate({ orderId });
   };
 
   return (
@@ -266,7 +267,9 @@ export default function Trading() {
                 <Card className="p-6">
                   <h3 className="text-lg font-semibold mb-4">活跃订单</h3>
 
-                  {orders.length === 0 ? (
+                  {ordersLoading ? (
+                    <p className="text-muted-foreground text-center py-8">加载中...</p>
+                  ) : orders.length === 0 ? (
                     <p className="text-muted-foreground text-center py-8">暂无活跃订单</p>
                   ) : (
                     <div className="space-y-3">

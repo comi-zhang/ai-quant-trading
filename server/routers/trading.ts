@@ -29,15 +29,30 @@ export const tradingRouter = router({
             orderId: "",
             symbol: input.symbol,
             quantity: input.quantity,
+            price: 0,
+            side: input.side,
+            status: "rejected" as const,
+            filledQuantity: 0,
+            filledPrice: 0,
+            timestamp: new Date().toISOString(),
+            message: "订单提交失败",
+          }
+        );
+      } catch (error) {
+        console.error("提交市价单失败:", error);
+        return {
+          orderId: "",
+          symbol: input.symbol,
+          quantity: input.quantity,
           price: 0,
           side: input.side,
           status: "rejected" as const,
           filledQuantity: 0,
           filledPrice: 0,
           timestamp: new Date().toISOString(),
-          message: "订单提交失败",
-        }
-      );
+          message: "订单提交失败: " + (error instanceof Error ? error.message : "未知错误"),
+        };
+      }
     }),
 
   /**
@@ -62,6 +77,21 @@ export const tradingRouter = router({
         );
         return (
           order || {
+            orderId: "",
+            symbol: input.symbol,
+            quantity: input.quantity,
+            price: input.price,
+            side: input.side,
+            status: "rejected" as const,
+            filledQuantity: 0,
+            filledPrice: 0,
+            timestamp: new Date().toISOString(),
+            message: "订单提交失败",
+          }
+        );
+      } catch (error) {
+        console.error("提交限价单失败:", error);
+        return {
           orderId: "",
           symbol: input.symbol,
           quantity: input.quantity,
@@ -71,9 +101,9 @@ export const tradingRouter = router({
           filledQuantity: 0,
           filledPrice: 0,
           timestamp: new Date().toISOString(),
-          message: "订单提交失败",
-        }
-      );
+          message: "订单提交失败: " + (error instanceof Error ? error.message : "未知错误"),
+        };
+      }
     }),
 
   /**
@@ -86,6 +116,21 @@ export const tradingRouter = router({
         const order = await getOrderStatus(input.orderId);
         return (
           order || {
+            orderId: input.orderId,
+            symbol: "",
+            quantity: 0,
+            price: 0,
+            side: "buy" as const,
+            status: "cancelled" as const,
+            filledQuantity: 0,
+            filledPrice: 0,
+            timestamp: new Date().toISOString(),
+            message: "订单不存在",
+          }
+        );
+      } catch (error) {
+        console.error("查询订单状态失败:", error);
+        return {
           orderId: input.orderId,
           symbol: "",
           quantity: 0,
@@ -95,9 +140,9 @@ export const tradingRouter = router({
           filledQuantity: 0,
           filledPrice: 0,
           timestamp: new Date().toISOString(),
-          message: "订单不存在",
-        }
-      );
+          message: "查询失败",
+        };
+      }
     }),
 
   /**
@@ -151,7 +196,22 @@ export const tradingRouter = router({
           input.useMarketOrder
         );
         return (
-        order || {
+          order || {
+            orderId: "",
+            symbol: input.symbol,
+            quantity: input.quantity,
+            price: input.targetPrice || 0,
+            side: input.action,
+            status: "rejected" as const,
+            filledQuantity: 0,
+            filledPrice: 0,
+            timestamp: new Date().toISOString(),
+            message: "自动交易执行失败",
+          }
+        );
+      } catch (error) {
+        console.error("自动交易失败:", error);
+        return {
           orderId: "",
           symbol: input.symbol,
           quantity: input.quantity,
@@ -161,8 +221,8 @@ export const tradingRouter = router({
           filledQuantity: 0,
           filledPrice: 0,
           timestamp: new Date().toISOString(),
-          message: "自动交易执行失败",
-        }
-      );
+          message: "自动交易执行失败: " + (error instanceof Error ? error.message : "未知错误"),
+        };
+      }
     }),
 });

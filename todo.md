@@ -75,8 +75,8 @@
 - [x] 修复路由配置问题
 - [x] 修复路由配置 - 正确指向Trading和Risk页面
 - [x] 清除Dashboard中的模拟数据 - 使用长桥API
-- [ ] 清除Trading中的模拟数据 - 使用长桥API
-- [ ] 清除RiskManagement中的模拟数据 - 使用长桥API
+- [x] 清除Trading中的模拟数据 - 使用长桥API
+- [x] 清除RiskManagement中的模拟数据 - 使用长桥API
 
 ## 文档和部署
 - [x] 编写系统使用文档

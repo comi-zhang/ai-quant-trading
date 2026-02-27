@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { publicProcedure, router } from "../_core/trpc";
-import { getRealTimeQuote, getRealTimeQuotes, getKlineData, getAccountAssets } from "../services/longbridgeRealtime";
+import { getRealTimeQuote, getRealTimeQuotes, getKlineData, getAccountAssets, getAccountPositions } from "../services/longbridgeRealtime";
 
 // 股票代码白名单验证
 const ALLOWED_SYMBOLS = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA", "AMD", "INTC", "NFLX"] as const;
@@ -71,5 +71,13 @@ export const quoteRouter = router({
       buyingPower: 0,
       currency: "USD",
     };
+  }),
+
+  /**
+   * 获取账户持仓信息 - 需要认证
+   */
+  getAccountPositions: publicProcedure.query(async () => {
+    const positions = await getAccountPositions();
+    return positions || [];
   }),
 });

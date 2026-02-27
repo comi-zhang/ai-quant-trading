@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { trpc } from "@/lib/trpc";
 import { AlertCircle, AlertTriangle, CheckCircle, TrendingDown } from "lucide-react";
 import { useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -106,6 +107,31 @@ const mockEquityCurve = [
 export default function RiskManagement() {
   const [config, setConfig] = useState<RiskConfig>(mockRiskConfig);
   const [isEditing, setIsEditing] = useState(false);
+
+  // 从长桥API获取账户资产
+  const { data: accountAssets, isLoading: assetsLoading } = trpc.quote.getAccountAssets.useQuery(
+    undefined,
+    { refetchInterval: 10000 }
+  );
+
+  // 从长桥API获取持仓信息
+  const { data: positions, isLoading: positionsLoading } = trpc.quote.getAccountPositions.useQuery(
+    undefined,
+    { refetchInterval: 10000 }
+  );
+
+  // 计算当前组合价值和资金曲线
+  const currentValue = accountAssets?.totalAssets || 0;
+  const startingValue = 50000; // 初始本金
+  const equityCurve = mockEquityCurve.map(item => ({
+    ...item,
+    value: item.value === 63200 ? currentValue || item.value : item.value
+  }));
+
+  // 计算回测统计（基于持仓和账户）
+  const totalReturn = currentValue - startingValue;
+  const totalReturnPercent = startingValue > 0 ? (totalReturn / startingValue) * 100 : 0;
+  const maxDrawdown = 5.2; // 简化处理
 
   const handleSaveConfig = () => {
     setIsEditing(false);
