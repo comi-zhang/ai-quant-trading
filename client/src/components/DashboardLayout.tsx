@@ -21,16 +21,17 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, TrendingUp, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, TrendingUp, AlertTriangle, FlaskConical } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: TrendingUp, label: "Page 2", path: "/trading" },
-  { icon: AlertTriangle, label: "Page 3", path: "/risk" },
+  { icon: LayoutDashboard, label: "仪表盘", path: "/" },
+  { icon: TrendingUp, label: "交易", path: "/trading" },
+  { icon: AlertTriangle, label: "风控", path: "/risk" },
+  { icon: FlaskConical, label: "回测观察台", path: "/backtest" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

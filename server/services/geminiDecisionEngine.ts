@@ -33,6 +33,7 @@ interface GeminiDecision {
 
 const GEMINI_API_URL = ENV.geminiApiUrl;
 const GEMINI_API_KEY = ENV.geminiApiKey;
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
 
 /**
  * 构建分析提示词
@@ -83,7 +84,7 @@ export async function analyzeWithGemini(data: AnalysisData): Promise<GeminiDecis
     const response = await axios.post(
       `${GEMINI_API_URL}/v1/chat/completions`,
       {
-        model: "gpt-3.5-turbo",
+        model: GEMINI_MODEL,
         messages: [
           {
             role: "system",

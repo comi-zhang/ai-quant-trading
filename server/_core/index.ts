@@ -7,6 +7,8 @@ import { registerOAuthRoutes, registerSimpleAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { ENV } from "./env";
+import { autoTradingScheduler } from "../jobs/autoTradingJob";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -60,7 +62,24 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    console.log(`[Boot] TRADING_MODE=${ENV.tradingMode} LIVE_TRADING_ENABLED=${ENV.liveTradingEnabled} AUTO_TRADING_ENABLED=${ENV.autoTradingEnabled}`);
+
+    // 调度器默认不启动：仅当自动交易开关显式打开时启动（只读分析模式）
+    if (ENV.autoTradingEnabled) {
+      autoTradingScheduler.start();
+      console.log("[Boot] 自动交易调度器已启动（executeOrders=false 只读分析）");
+    }
   });
+
+  // 优雅关闭
+  const shutdown = async (signal: string) => {
+    console.log(`[Shutdown] ${signal} received, stopping scheduler...`);
+    await autoTradingScheduler.stop().catch(() => undefined);
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 10_000).unref();
+  };
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
 }
 
 startServer().catch(console.error);

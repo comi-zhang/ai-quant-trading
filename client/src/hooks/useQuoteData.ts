@@ -1,85 +1,89 @@
-import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 
 export interface StockQuote {
   symbol: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  high: number;
-  low: number;
-  volume: number;
+  /** null = 上游未提供（UI 必须显示为未知，不得显示 0 冒充） */
+  price: number | null;
+  change: number | null;
+  changePercent: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
 }
 
-/**
- * Hook用于获取实时股票行情数据
- * @param symbols 股票代码数组
- * @param refetchInterval 刷新间隔（毫秒）
- */
-export function useQuoteData(symbols: string[], refetchInterval: number = 5000) {
-  const [quotes, setQuotes] = useState<StockQuote[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const { data: apiQuotes, isLoading } = trpc.quote.getQuotes.useQuery(
-    { symbols },
-    { refetchInterval }
-  );
-
-  useEffect(() => {
-    if (apiQuotes && apiQuotes.length > 0) {
-      const transformedQuotes = apiQuotes.map((q) => ({
-        symbol: q.symbol,
-        price: q.lastPrice,
-        change: q.change,
-        changePercent: q.changePercent,
-        high: q.highPrice,
-        low: q.lowPrice,
-        volume: q.volume,
-      }));
-      setQuotes(transformedQuotes);
-      setLoading(false);
-    }
-  }, [apiQuotes]);
-
-  return { quotes, loading: loading || isLoading, error };
-}
-
-/**
- * Hook用于获取账户资产信息
- */
-export function useAccountAssets() {
-  const { data: assets, isLoading, error } = trpc.quote.getAccountAssets.useQuery(
-    undefined,
-    { refetchInterval: 10000 }
-  );
-
+function withChange(q: {
+  symbol: string;
+  lastDone: number | null;
+  prevClose: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+}): StockQuote {
+  const change =
+    q.lastDone !== null && q.prevClose !== null ? q.lastDone - q.prevClose : null;
+  const changePercent =
+    change !== null && q.prevClose !== null && q.prevClose > 0
+      ? (change / q.prevClose) * 100
+      : null;
   return {
-    totalAssets: assets?.totalAssets || 0,
-    availableCash: assets?.availableCash || 0,
-    marketValue: assets?.marketValue || 0,
-    buyingPower: assets?.buyingPower || 0,
-    currency: assets?.currency || "USD",
-    loading: isLoading,
-    error,
+    symbol: q.symbol,
+    price: q.lastDone,
+    change,
+    changePercent,
+    high: q.high,
+    low: q.low,
+    volume: q.volume,
   };
 }
 
 /**
- * Hook用于获取K线数据
+ * 实时行情（public）。错误/加载/空状态全部显式暴露给调用方。
  */
-export function useKlineData(
-  symbol: string,
-  period: "day" | "week" | "month" | "1m" | "5m" | "15m" | "30m" | "60m" = "day"
-) {
-  const { data: klines, isLoading, error } = trpc.quote.getKline.useQuery(
-    { symbol, period, limit: 100 },
-    { refetchInterval: 30000 }
+export function useQuoteData(symbols: string[], refetchInterval: number = 15000) {
+  const query = trpc.quote.getQuotes.useQuery(
+    { symbols },
+    { refetchInterval, retry: 1 }
   );
 
   return {
-    klines: klines || [],
-    loading: isLoading,
-    error,
+    quotes: (query.data ?? []).map(withChange),
+    loading: query.isLoading,
+    error: query.error,
+    isStale: query.isStale,
+    dataUpdatedAt: query.dataUpdatedAt,
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * 账户资产总览（protected）
+ */
+export function useAccountAssets(refetchInterval: number = 15000) {
+  const query = trpc.quote.getAccountAssets.useQuery(undefined, {
+    refetchInterval,
+    retry: 1,
+  });
+
+  return {
+    assets: query.data ?? null,
+    loading: query.isLoading,
+    error: query.error,
+    dataUpdatedAt: query.dataUpdatedAt,
+  };
+}
+
+/**
+ * K线数据
+ */
+export function useKlineData(symbol: string, period: "day" | "week" | "month" = "day") {
+  const query = trpc.quote.getKline.useQuery(
+    { symbol, period, limit: 100 },
+    { refetchInterval: 60000, retry: 1 }
+  );
+
+  return {
+    klines: query.data ?? [],
+    loading: query.isLoading,
+    error: query.error,
   };
 }

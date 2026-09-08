@@ -3,484 +3,236 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, AlertTriangle, CheckCircle, TrendingDown } from "lucide-react";
-import { useState } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { AlertTriangle, Shield, ShieldOff } from "lucide-react";
+import { useEffect, useState } from "react";
 
 /**
- * 风险管理页面
- * 展示风险配置、持仓风险评估和回测结果
+ * 风控配置页面
+ * - 配置来自服务端持久化（risk_config 表），保存即生效并记录版本/审计；
+ * - kill switch 立即暂停全部新订单；
+ * - 无任何 mock 回测/收益数据。
  */
 
-interface RiskConfig {
-  maxLossPerTrade: number;
-  maxLossPerDay: number;
-  maxPositionSize: number;
-  maxTotalPositionSize: number;
-  stopLossPercent: number;
-  takeProfitPercent: number;
-  maxOrderSize: number;
-  minAccountBalance: number;
+interface FormState {
+  maxPositionSize: string;
+  maxTotalExposure: string;
+  maxOrderQuantity: string;
+  maxDailyTrades: string;
+  maxDailyLoss: string;
+  minAccountBalance: string;
+  stopLossPercent: string;
+  takeProfitPercent: string;
+  enableAutoTrading: boolean;
 }
-
-interface BacktestResult {
-  symbol: string;
-  totalReturn: number;
-  totalReturnPercent: number;
-  winRate: number;
-  profitFactor: number;
-  maxDrawdown: number;
-  sharpeRatio: number;
-  totalTrades: number;
-}
-
-const mockRiskConfig: RiskConfig = {
-  maxLossPerTrade: 500,
-  maxLossPerDay: 2000,
-  maxPositionSize: 10000,
-  maxTotalPositionSize: 50000,
-  stopLossPercent: 2.0,
-  takeProfitPercent: 5.0,
-  maxOrderSize: 1000,
-  minAccountBalance: 5000,
-};
-
-const mockBacktestResults: BacktestResult[] = [
-  {
-    symbol: "AAPL",
-    totalReturn: 2450,
-    totalReturnPercent: 4.9,
-    winRate: 62.5,
-    profitFactor: 2.15,
-    maxDrawdown: 3.2,
-    sharpeRatio: 1.85,
-    totalTrades: 16,
-  },
-  {
-    symbol: "MSFT",
-    totalReturn: 1850,
-    totalReturnPercent: 3.7,
-    winRate: 58.3,
-    profitFactor: 1.92,
-    maxDrawdown: 4.1,
-    sharpeRatio: 1.42,
-    totalTrades: 12,
-  },
-  {
-    symbol: "TSLA",
-    totalReturn: 3200,
-    totalReturnPercent: 6.4,
-    winRate: 65.0,
-    profitFactor: 2.58,
-    maxDrawdown: 5.5,
-    sharpeRatio: 2.12,
-    totalTrades: 20,
-  },
-];
-
-const mockEquityCurve = [
-  { date: "2025-12-01", value: 50000 },
-  { date: "2025-12-02", value: 50450 },
-  { date: "2025-12-03", value: 50200 },
-  { date: "2025-12-04", value: 51100 },
-  { date: "2025-12-05", value: 50800 },
-  { date: "2025-12-06", value: 52300 },
-  { date: "2025-12-07", value: 51900 },
-  { date: "2025-12-08", value: 53400 },
-  { date: "2025-12-09", value: 54200 },
-  { date: "2025-12-10", value: 53800 },
-  { date: "2025-12-11", value: 55600 },
-  { date: "2025-12-12", value: 56200 },
-  { date: "2025-12-13", value: 55900 },
-  { date: "2025-12-14", value: 57100 },
-  { date: "2025-12-15", value: 58300 },
-  { date: "2025-12-16", value: 57800 },
-  { date: "2025-12-17", value: 59200 },
-  { date: "2025-12-18", value: 60100 },
-  { date: "2025-12-19", value: 61500 },
-  { date: "2025-12-20", value: 62450 },
-  { date: "2025-12-21", value: 63200 },
-];
 
 export default function RiskManagement() {
-  const [config, setConfig] = useState<RiskConfig>(mockRiskConfig);
-  const [isEditing, setIsEditing] = useState(false);
+  const { isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
+  const [form, setForm] = useState<FormState | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // 从长桥API获取账户资产
-  const { data: accountAssets, isLoading: assetsLoading } = trpc.quote.getAccountAssets.useQuery(
-    undefined,
-    { refetchInterval: 10000 }
-  );
+  const configQuery = trpc.risk.getConfig.useQuery(undefined, {
+    enabled: isAuthenticated,
+    retry: 1,
+  });
 
-  // 从长桥API获取持仓信息
-  const { data: positions, isLoading: positionsLoading } = trpc.quote.getAccountPositions.useQuery(
-    undefined,
-    { refetchInterval: 10000 }
-  );
+  useEffect(() => {
+    const c = configQuery.data;
+    if (c && form === null) {
+      setForm({
+        maxPositionSize: String(Number(c.maxPositionSize)),
+        maxTotalExposure: String(Number(c.maxTotalExposure)),
+        maxOrderQuantity: String(c.maxOrderQuantity),
+        maxDailyTrades: String(c.maxDailyTrades),
+        maxDailyLoss: String(Number(c.maxDailyLoss)),
+        minAccountBalance: String(Number(c.minAccountBalance)),
+        stopLossPercent: String(Number(c.stopLossPercent)),
+        takeProfitPercent: String(Number(c.takeProfitPercent)),
+        enableAutoTrading: c.enableAutoTrading,
+      });
+    }
+  }, [configQuery.data, form]);
 
-  // 计算当前组合价值和资金曲线
-  const currentValue = accountAssets?.totalAssets || 0;
-  const startingValue = 50000; // 初始本金
-  const equityCurve = mockEquityCurve.map(item => ({
-    ...item,
-    value: item.value === 63200 ? currentValue || item.value : item.value
-  }));
+  const updateMutation = trpc.risk.updateConfig.useMutation({
+    onSuccess: (updated) => {
+      setMessage({ ok: true, text: `已保存（版本 v${updated.version}）` });
+      utils.risk.getConfig.invalidate();
+    },
+    onError: (err) => setMessage({ ok: false, text: `保存失败: ${err.message}` }),
+  });
 
-  // 计算回测统计（基于持仓和账户）
-  const totalReturn = currentValue - startingValue;
-  const totalReturnPercent = startingValue > 0 ? (totalReturn / startingValue) * 100 : 0;
-  const maxDrawdown = 5.2; // 简化处理
+  const haltMutation = trpc.risk.haltTrading.useMutation({
+    onSuccess: () => {
+      setMessage({ ok: true, text: "交易已暂停（kill switch 生效）" });
+      utils.risk.getConfig.invalidate();
+    },
+    onError: (err) => setMessage({ ok: false, text: `操作失败: ${err.message}` }),
+  });
 
-  const handleSaveConfig = () => {
-    setIsEditing(false);
-    alert("Risk configuration saved successfully");
+  const resumeMutation = trpc.risk.resumeTrading.useMutation({
+    onSuccess: () => {
+      setMessage({ ok: true, text: "交易已恢复" });
+      utils.risk.getConfig.invalidate();
+    },
+    onError: (err) => setMessage({ ok: false, text: `操作失败: ${err.message}` }),
+  });
+
+  const handleSave = () => {
+    if (!form) return;
+    setMessage(null);
+    const num = (v: string) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+    const int = (v: string) => {
+      const n = Number(v);
+      return Number.isInteger(n) && n > 0 ? n : undefined;
+    };
+    updateMutation.mutate({
+      maxPositionSize: num(form.maxPositionSize),
+      maxTotalExposure: num(form.maxTotalExposure),
+      maxOrderQuantity: int(form.maxOrderQuantity),
+      maxDailyTrades: int(form.maxDailyTrades),
+      maxDailyLoss: num(form.maxDailyLoss),
+      minAccountBalance: num(form.minAccountBalance) ?? 0,
+      stopLossPercent: num(form.stopLossPercent),
+      takeProfitPercent: num(form.takeProfitPercent),
+      enableAutoTrading: form.enableAutoTrading,
+    });
   };
+
+  const halted = configQuery.data?.tradingHalted ?? false;
+
+  const field = (
+    id: keyof FormState,
+    label: string,
+    hint: string,
+    opts: { integer?: boolean } = {}
+  ) => (
+    <div key={id}>
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="number"
+        min={opts.integer ? "1" : "0"}
+        step={opts.integer ? "1" : "0.01"}
+        value={(form?.[id] as string) ?? ""}
+        onChange={(e) => form && setForm({ ...form, [id]: e.target.value })}
+      />
+      <p className="text-xs text-muted-foreground mt-1">{hint}</p>
+    </div>
+  );
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* 风险概览 */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="stat-card">
-            <div className="stat-label">Max Daily Loss</div>
-            <div className="stat-value text-negative">${config.maxLossPerDay}</div>
-            <div className="stat-change neutral">Per day limit</div>
-          </Card>
-
-          <Card className="stat-card">
-            <div className="stat-label">Max Position Size</div>
-            <div className="stat-value">${config.maxPositionSize}</div>
-            <div className="stat-change neutral">Per stock</div>
-          </Card>
-
-          <Card className="stat-card">
-            <div className="stat-label">Stop Loss</div>
-            <div className="stat-value text-negative">{config.stopLossPercent}%</div>
-            <div className="stat-change neutral">Default level</div>
-          </Card>
-
-          <Card className="stat-card">
-            <div className="stat-label">Take Profit</div>
-            <div className="stat-value text-positive">{config.takeProfitPercent}%</div>
-            <div className="stat-change neutral">Default level</div>
-          </Card>
+      <div className="space-y-6 max-w-4xl">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">风险控制</h2>
+          {configQuery.data && (
+            <span className="text-xs text-muted-foreground">配置版本 v{configQuery.data.version}</span>
+          )}
         </div>
 
-        {/* 主要内容 */}
-        <Tabs defaultValue="config" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="config">风险配置</TabsTrigger>
-            <TabsTrigger value="backtest">回测结果</TabsTrigger>
-            <TabsTrigger value="equity">资金曲线</TabsTrigger>
-          </TabsList>
+        {message && (
+          <div
+            className={`p-3 rounded-lg border text-sm ${
+              message.ok
+                ? "bg-positive/10 border-positive/30 text-positive"
+                : "bg-destructive/10 border-destructive/30 text-destructive"
+            }`}
+          >
+            {message.text}
+          </div>
+        )}
 
-          {/* 风险配置 */}
-          <TabsContent value="config" className="space-y-4">
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold">风险参数</h3>
-                <Button
-                  onClick={() => setIsEditing(!isEditing)}
-                  variant={isEditing ? "outline" : "default"}
-                >
-                  {isEditing ? "取消" : "编辑"}
-                </Button>
+        {configQuery.error && (
+          <div className="p-3 rounded-lg border bg-destructive/10 border-destructive/30 text-destructive text-sm flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            配置加载失败: {configQuery.error.message}
+          </div>
+        )}
+
+        {/* Kill Switch */}
+        <Card className={`p-6 border-2 ${halted ? "border-destructive" : "border-border"}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {halted ? <ShieldOff className="w-6 h-6 text-destructive" /> : <Shield className="w-6 h-6 text-positive" />}
+              <div>
+                <h3 className="text-lg font-semibold">Kill Switch（交易总开关）</h3>
+                <p className="text-sm text-muted-foreground">
+                  {halted
+                    ? `交易已暂停${configQuery.data?.haltReason ? `: ${configQuery.data.haltReason}` : ""}。所有新订单将被拒绝。`
+                    : "交易正常运行中。暂停后所有新订单立即被拒绝。"}
+                </p>
+              </div>
+            </div>
+            {halted ? (
+              <Button onClick={() => resumeMutation.mutate()} disabled={resumeMutation.isPending} variant="outline">
+                恢复交易
+              </Button>
+            ) : (
+              <Button
+                onClick={() => haltMutation.mutate({ reason: "手动暂停" })}
+                disabled={haltMutation.isPending}
+                variant="destructive"
+              >
+                暂停交易
+              </Button>
+            )}
+          </div>
+        </Card>
+
+        {/* 配置表单 */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4">风控参数</h3>
+          {configQuery.isLoading || form === null ? (
+            <p className="text-muted-foreground text-center py-8">加载中…</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {field("maxPositionSize", "单标的最大暴露 ($)", "单个股票持仓市值上限（含新订单）")}
+                {field("maxTotalExposure", "总暴露上限 ($)", "全部持仓市值总和上限")}
+                {field("maxOrderQuantity", "单笔最大数量 (股)", "单个订单的股数上限", { integer: true })}
+                {field("maxDailyTrades", "日最大交易次数", "当日订单数达到上限后拒绝新订单", { integer: true })}
+                {field("maxDailyLoss", "日最大亏损 ($)", "当日已实现亏损达到上限后熔断")}
+                {field("minAccountBalance", "最小保留余额 ($)", "买入后剩余现金不得低于该值")}
+                {field("stopLossPercent", "止损比例 (%)", "持仓止损参考（用于告警与策略）")}
+                {field("takeProfitPercent", "止盈比例 (%)", "持仓止盈参考（用于告警与策略）")}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* 交易限额 */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-muted-foreground">交易限额</h4>
-
-                  <div>
-                    <Label htmlFor="maxLossPerTrade">Max Loss Per Trade ($)</Label>
-                    <Input
-                      id="maxLossPerTrade"
-                      type="number"
-                      value={config.maxLossPerTrade}
-                      onChange={(e) =>
-                        setConfig({ ...config, maxLossPerTrade: parseFloat(e.target.value) || 0 })
-                      }
-                      disabled={!isEditing}
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="maxLossPerDay">Max Loss Per Day ($)</Label>
-                    <Input
-                      id="maxLossPerDay"
-                      type="number"
-                      value={config.maxLossPerDay}
-                      onChange={(e) =>
-                        setConfig({ ...config, maxLossPerDay: parseFloat(e.target.value) || 0 })
-                      }
-                      disabled={!isEditing}
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="maxOrderSize">Max Order Size (shares)</Label>
-                    <Input
-                      id="maxOrderSize"
-                      type="number"
-                      value={config.maxOrderSize}
-                      onChange={(e) =>
-                        setConfig({ ...config, maxOrderSize: parseFloat(e.target.value) || 0 })
-                      }
-                      disabled={!isEditing}
-                    />
-                  </div>
-                </div>
-
-                {/* 持仓限额 */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-muted-foreground">持仓限额</h4>
-
-                  <div>
-                    <Label htmlFor="maxPositionSize">Max Position Size ($)</Label>
-                    <Input
-                      id="maxPositionSize"
-                      type="number"
-                      value={config.maxPositionSize}
-                      onChange={(e) =>
-                        setConfig({ ...config, maxPositionSize: parseFloat(e.target.value) || 0 })
-                      }
-                      disabled={!isEditing}
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="maxTotalPositionSize">Max Total Position Size ($)</Label>
-                    <Input
-                      id="maxTotalPositionSize"
-                      type="number"
-                      value={config.maxTotalPositionSize}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          maxTotalPositionSize: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      disabled={!isEditing}
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="minAccountBalance">Min Account Balance ($)</Label>
-                    <Input
-                      id="minAccountBalance"
-                      type="number"
-                      value={config.minAccountBalance}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          minAccountBalance: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      disabled={!isEditing}
-                    />
-                  </div>
-                </div>
-
-                {/* 止损止盈 */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-muted-foreground">止损止盈</h4>
-
-                  <div>
-                    <Label htmlFor="stopLossPercent">Stop Loss (%)</Label>
-                    <Input
-                      id="stopLossPercent"
-                      type="number"
-                      step="0.1"
-                      value={config.stopLossPercent}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          stopLossPercent: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      disabled={!isEditing}
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="takeProfitPercent">Take Profit (%)</Label>
-                    <Input
-                      id="takeProfitPercent"
-                      type="number"
-                      step="0.1"
-                      value={config.takeProfitPercent}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          takeProfitPercent: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      disabled={!isEditing}
-                    />
-                  </div>
-                </div>
-
-                {/* 风险提示 */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-muted-foreground">风险提醒</h4>
-                  <div className="p-4 bg-warning/10 border border-warning rounded-lg">
-                    <div className="flex gap-2">
-                      <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0" />
-                      <div className="text-sm">
-                        <p className="font-semibold">Current Settings</p>
-                        <p className="mt-2">
-                          Daily loss limit: ${config.maxLossPerDay}
-                          <br />
-                          Max position: ${config.maxPositionSize}
-                          <br />
-                          Stop loss: {config.stopLossPercent}%
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {isEditing && (
-                <div className="flex gap-2 mt-6">
-                    <Button onClick={handleSaveConfig} className="bg-positive">
-                    保存配置
-                  </Button>
-                  <Button onClick={() => setIsEditing(false)} variant="outline">
-                    取消
-                  </Button>
-                </div>
-              )}
-            </Card>
-          </TabsContent>
-
-          {/* 回测结果 */}
-          <TabsContent value="backtest" className="space-y-4">
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">策略回测结果</h3>
-
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>股票</th>
-                      <th>总收益</th>
-                      <th>收益率</th>
-                      <th>胜率</th>
-                      <th>盈亏比</th>
-                      <th>最大回撤</th>
-                      <th>Sharpe比率</th>
-                      <th>交易数</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mockBacktestResults.map((result) => (
-                      <tr key={result.symbol}>
-                        <td className="font-semibold">{result.symbol}</td>
-                        <td className={result.totalReturn >= 0 ? "price-up" : "price-down"}>
-                          ${result.totalReturn.toFixed(2)}
-                        </td>
-                        <td className={result.totalReturnPercent >= 0 ? "price-up" : "price-down"}>
-                          {result.totalReturnPercent >= 0 ? "+" : ""}
-                          {result.totalReturnPercent.toFixed(2)}%
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-1">
-                            {result.winRate >= 55 && (
-                              <CheckCircle className="w-4 h-4 text-positive" />
-                            )}
-                            {result.winRate.toFixed(1)}%
-                          </div>
-                        </td>
-                        <td className={result.profitFactor >= 1.5 ? "price-up" : "price-down"}>
-                          {result.profitFactor.toFixed(2)}
-                        </td>
-                        <td className={result.maxDrawdown <= 5 ? "text-neutral" : "price-down"}>
-                          {result.maxDrawdown.toFixed(2)}%
-                        </td>
-                        <td className={result.sharpeRatio >= 1.5 ? "price-up" : "text-neutral"}>
-                          {result.sharpeRatio.toFixed(2)}
-                        </td>
-                        <td>{result.totalTrades}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* 回测解释 */}
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-card border border-border rounded-lg">
-                  <h4 className="font-semibold text-sm mb-2">胜率</h4>
-                  <p className="text-xs text-muted-foreground">
-                    盘利交易的比例。越高越好，通常 50%+ 是不错的。
+              <div className="flex items-center justify-between mt-6 p-4 border border-border rounded-lg">
+                <div>
+                  <div className="font-semibold">允许自动交易执行</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    仅当服务端 AUTO_TRADING_ENABLED=true 且此开关打开时，策略才会真实下单；否则只产生只读分析。
                   </p>
                 </div>
-                <div className="p-4 bg-card border border-border rounded-lg">
-                  <h4 className="font-semibold text-sm mb-2">盈亏比</h4>
-                  <p className="text-xs text-muted-foreground">
-                    汛利与亏损的比率。超过 1.5 为不错。
-                  </p>
-                </div>
-                <div className="p-4 bg-card border border-border rounded-lg">
-                  <h4 className="font-semibold text-sm mb-2">Sharpe比率</h4>
-                  <p className="text-xs text-muted-foreground">
-                    风险调整后的收益。超过 1.0 为不错，超过 2.0 是优秀。
-                  </p>
-                </div>
+                <Switch
+                  checked={form.enableAutoTrading}
+                  onCheckedChange={(v) => setForm({ ...form, enableAutoTrading: v })}
+                />
               </div>
-            </Card>
-          </TabsContent>
 
-          {/* 资金曲线 */}
-          <TabsContent value="equity" className="space-y-4">
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold mb-4">资金曲线（最运21天）</h3>
+              <Button onClick={handleSave} disabled={updateMutation.isPending} className="mt-6 w-full">
+                {updateMutation.isPending ? "保存中…" : "保存配置"}
+              </Button>
+            </>
+          )}
+        </Card>
 
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={mockEquityCurve}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="value"
-                    stroke="hsl(var(--primary))"
-                    dot={false}
-                    name="Portfolio Value"
-                    strokeWidth={2}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-
-              {/* 统计信息 */}
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="stat-card">
-                  <div className="stat-label">Starting Value</div>
-                  <div className="stat-value">$50,000</div>
-                  <div className="stat-change neutral">Initial capital</div>
-                </Card>
-
-                <Card className="stat-card">
-                  <div className="stat-label">Current Value</div>
-                  <div className="stat-value text-positive">$63,200</div>
-                  <div className="stat-change positive">+26.4%</div>
-                </Card>
-
-                <Card className="stat-card">
-                  <div className="stat-label">Max Drawdown</div>
-                  <div className="stat-value text-negative">-5.2%</div>
-                  <div className="stat-change neutral">Worst peak-to-trough</div>
-                </Card>
-              </div>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        {/* 风控说明 */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-3">执行中的风控规则</h3>
+          <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
+            <li>所有订单在服务端基于一致性快照（现金/持仓/当日统计/参考价）评估。</li>
+            <li>参考价缺失或过期、现金未知、持仓市值未知时一律拒绝（fail closed）。</li>
+            <li>被拒绝的订单持久化留痕，可在订单历史中查看拒绝原因。</li>
+            <li>重复提交（相同幂等键）不会产生重复订单。</li>
+          </ul>
+        </Card>
       </div>
     </DashboardLayout>
   );

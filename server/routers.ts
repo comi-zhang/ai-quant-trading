@@ -6,6 +6,8 @@ import { quoteRouter } from "./routers/quote";
 import { decisionRouter } from "./routers/decision";
 import { tradingRouter } from "./routers/trading";
 import { autoTradingRouter } from "./routers/autoTrading";
+import { riskRouter } from "./routers/risk";
+import { backtestRouter } from "./routers/backtest";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -24,6 +26,8 @@ export const appRouter = router({
   decision: decisionRouter,
   trading: tradingRouter,
   autoTrading: autoTradingRouter,
+  risk: riskRouter,
+  backtest: backtestRouter,
 });
 
 export type AppRouter = typeof appRouter;

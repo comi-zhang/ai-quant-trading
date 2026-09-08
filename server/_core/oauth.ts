@@ -1,7 +1,9 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { createHash, timingSafeEqual } from "crypto";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
+import { ENV } from "./env";
 import { sdk } from "./sdk";
 
 function getQueryParam(req: Request, key: string): string | undefined {
@@ -53,21 +55,47 @@ export function registerOAuthRoutes(app: Express) {
 }
 
 // Simple username/password auth for single user
+// 凭据只从环境变量读取：AUTH_USERNAME + AUTH_PASSWORD_HASH（SHA-256 hex）。
+// 未配置时登录端点直接拒绝，绝不存在默认/硬编码凭据。
+function sha256Hex(input: string): string {
+  return createHash("sha256").update(input, "utf8").digest("hex");
+}
+
+function safeEqualHex(a: string, b: string): boolean {
+  if (!/^[0-9a-f]{64}$/i.test(a) || !/^[0-9a-f]{64}$/i.test(b)) return false;
+  return timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
+}
+
 export function registerSimpleAuthRoutes(app: Express) {
   app.post("/api/auth/login", async (req: Request, res: Response) => {
-    const { username, password } = req.body;
+    const { username, password } = req.body ?? {};
 
-    // Hardcoded credentials
-    if (username === "comi" && password === "z2805532913") {
-      const sessionToken = await sdk.createSessionToken("comi-user", {
-        name: "comi",
+    const expectedUser = ENV.authUsername;
+    const expectedHash = ENV.authPasswordHash;
+    if (!expectedUser || !expectedHash) {
+      // 未配置登录凭据：fail closed
+      res.status(503).json({ error: "Login is not configured on this server" });
+      return;
+    }
+
+    if (typeof username !== "string" || typeof password !== "string") {
+      res.status(400).json({ error: "username and password are required" });
+      return;
+    }
+
+    const userOk = username === expectedUser;
+    const passOk = safeEqualHex(sha256Hex(password), expectedHash.toLowerCase());
+
+    if (userOk && passOk) {
+      const sessionToken = await sdk.createSessionToken(`local:${expectedUser}`, {
+        name: expectedUser,
         expiresInMs: ONE_YEAR_MS,
       });
 
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      res.json({ success: true, name: "comi" });
+      res.json({ success: true, name: expectedUser });
     } else {
       res.status(401).json({ error: "Invalid credentials" });
     }

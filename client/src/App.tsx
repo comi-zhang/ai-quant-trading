@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import Trading from "./pages/Trading";
 import RiskManagement from "./pages/RiskManagement";
+import Backtest from "./pages/Backtest";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -18,6 +19,7 @@ function Router() {
       <Route path={"/dashboard"} component={Dashboard} />
       <Route path={"/trading"} component={Trading} />
       <Route path={"/risk"} component={RiskManagement} />
+      <Route path={"/backtest"} component={Backtest} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

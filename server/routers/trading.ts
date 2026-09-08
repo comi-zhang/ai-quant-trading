@@ -1,228 +1,89 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
-import {
-  submitMarketOrder,
-  submitLimitOrder,
-  getOrderStatus,
-  cancelOrder,
-  getAllOrders,
-  executeAutoTrade,
-} from "../services/longbridgeTrading";
+import { getOrderService, type OrderResult } from "../services/orderService";
+import { isLiveMode } from "../services/tradingMode";
+
+/**
+ * 交易路由（全部 protected）
+ * - 失败以 TRPCError 或显式 status 返回，绝不把失败伪装成 success；
+ * - 默认 paper 模式；live 需要双开关，由 orderService 内部守卫。
+ */
+
+async function requireService() {
+  const service = await getOrderService();
+  if (!service) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "交易服务不可用（数据库未连接）。没有持久化就没有交易。",
+    });
+  }
+  return service;
+}
+
+const submitSchema = z.object({
+  symbol: z.string().min(1).max(20),
+  side: z.enum(["buy", "sell"]),
+  orderType: z.enum(["market", "limit"]),
+  quantity: z.number().int().positive().max(1_000_000),
+  limitPrice: z.number().positive().max(10_000_000).optional(),
+  timeInForce: z.enum(["day", "gtc"]).default("day"),
+  clientOrderId: z.string().min(8).max(64).optional(),
+});
 
 export const tradingRouter = router({
-  /**
-   * 提交市价单 - 需要认证
-   */
-  submitMarketOrder: protectedProcedure
-    .input(
-      z.object({
-        symbol: z.string().min(1).max(10), // 股票代码长度限制
-        quantity: z.number().positive().int().max(1000000), // 数量限制
-        side: z.enum(["buy", "sell"]),
-      })
-    )
-    .mutation(async ({ input }) => {
-      try {
-        const order = await submitMarketOrder(input.symbol, input.quantity, input.side);
-        return (
-          order || {
-            orderId: "",
-            symbol: input.symbol,
-            quantity: input.quantity,
-            price: 0,
-            side: input.side,
-            status: "rejected" as const,
-            filledQuantity: 0,
-            filledPrice: 0,
-            timestamp: new Date().toISOString(),
-            message: "订单提交失败",
-          }
-        );
-      } catch (error) {
-        console.error("提交市价单失败:", error);
-        return {
-          orderId: "",
-          symbol: input.symbol,
-          quantity: input.quantity,
-          price: 0,
-          side: input.side,
-          status: "rejected" as const,
-          filledQuantity: 0,
-          filledPrice: 0,
-          timestamp: new Date().toISOString(),
-          message: "订单提交失败: " + (error instanceof Error ? error.message : "未知错误"),
-        };
-      }
-    }),
-
-  /**
-   * 提交限价单 - 需要认证
-   */
-  submitLimitOrder: protectedProcedure
-    .input(
-      z.object({
-        symbol: z.string().min(1).max(10),
-        quantity: z.number().positive().int().max(1000000),
-        price: z.number().positive().max(1000000),
-        side: z.enum(["buy", "sell"]),
-      })
-    )
-    .mutation(async ({ input }) => {
-      try {
-        const order = await submitLimitOrder(
-          input.symbol,
-          input.quantity,
-          input.price,
-          input.side
-        );
-        return (
-          order || {
-            orderId: "",
-            symbol: input.symbol,
-            quantity: input.quantity,
-            price: input.price,
-            side: input.side,
-            status: "rejected" as const,
-            filledQuantity: 0,
-            filledPrice: 0,
-            timestamp: new Date().toISOString(),
-            message: "订单提交失败",
-          }
-        );
-      } catch (error) {
-        console.error("提交限价单失败:", error);
-        return {
-          orderId: "",
-          symbol: input.symbol,
-          quantity: input.quantity,
-          price: input.price,
-          side: input.side,
-          status: "rejected" as const,
-          filledQuantity: 0,
-          filledPrice: 0,
-          timestamp: new Date().toISOString(),
-          message: "订单提交失败: " + (error instanceof Error ? error.message : "未知错误"),
-        };
-      }
-    }),
-
-  /**
-   * 查询订单状态 - 需要认证
-   */
-  getOrderStatus: protectedProcedure
-    .input(z.object({ orderId: z.string().min(1).max(50) }))
-    .query(async ({ input }) => {
-      try {
-        const order = await getOrderStatus(input.orderId);
-        return (
-          order || {
-            orderId: input.orderId,
-            symbol: "",
-            quantity: 0,
-            price: 0,
-            side: "buy" as const,
-            status: "cancelled" as const,
-            filledQuantity: 0,
-            filledPrice: 0,
-            timestamp: new Date().toISOString(),
-            message: "订单不存在",
-          }
-        );
-      } catch (error) {
-        console.error("查询订单状态失败:", error);
-        return {
-          orderId: input.orderId,
-          symbol: "",
-          quantity: 0,
-          price: 0,
-          side: "buy" as const,
-          status: "cancelled" as const,
-          filledQuantity: 0,
-          filledPrice: 0,
-          timestamp: new Date().toISOString(),
-          message: "查询失败",
-        };
-      }
-    }),
-
-  /**
-   * 撤销订单 - 需要认证
-   */
-  cancelOrder: protectedProcedure
-    .input(z.object({ orderId: z.string().min(1).max(50) }))
-    .mutation(async ({ input }) => {
-      try {
-        const success = await cancelOrder(input.orderId);
-        return { success, orderId: input.orderId };
-      } catch (error) {
-        console.error("[Trading] Failed to cancel order:", error);
-        return { success: false, orderId: input.orderId, error: "撤销失败" };
-      }
-    }),
-
-  /**
-   * 获取所有订单 - 需要认证
-   */
-  getAllOrders: protectedProcedure.query(async () => {
-    try {
-      const orders = await getAllOrders();
-      return orders;
-    } catch (error) {
-      console.error("[Trading] Failed to get orders:", error);
-      return [];
-    }
+  /** 提交订单（市价/限价统一入口）。返回明确的业务状态，失败不是 success。 */
+  submitOrder: protectedProcedure.input(submitSchema).mutation(async ({ ctx, input }) => {
+    const service = await requireService();
+    const result: OrderResult = await service.submitOrder({
+      userId: ctx.user.id,
+      symbol: input.symbol,
+      side: input.side,
+      orderType: input.orderType,
+      quantity: input.quantity,
+      limitPrice: input.limitPrice,
+      timeInForce: input.timeInForce,
+      clientOrderId: input.clientOrderId,
+    });
+    return result;
   }),
 
-  /**
-   * 执行自动交易 - 需要认证
-   */
-  executeAutoTrade: protectedProcedure
-    .input(
-      z.object({
-        symbol: z.string().min(1).max(10),
-        action: z.enum(["buy", "sell"]),
-        quantity: z.number().positive().int().max(1000000),
-        targetPrice: z.number().positive().max(1000000).optional(),
-        useMarketOrder: z.boolean().default(false),
-      })
-    )
-    .mutation(async ({ input }) => {
-      try {
-        const order = await executeAutoTrade(
-          input.symbol,
-          input.action,
-          input.quantity,
-          input.targetPrice,
-          input.useMarketOrder
-        );
-        return (
-          order || {
-            orderId: "",
-            symbol: input.symbol,
-            quantity: input.quantity,
-            price: input.targetPrice || 0,
-            side: input.action,
-            status: "rejected" as const,
-            filledQuantity: 0,
-            filledPrice: 0,
-            timestamp: new Date().toISOString(),
-            message: "自动交易执行失败",
-          }
-        );
-      } catch (error) {
-        console.error("自动交易失败:", error);
-        return {
-          orderId: "",
-          symbol: input.symbol,
-          quantity: input.quantity,
-          price: input.targetPrice || 0,
-          side: input.action,
-          status: "rejected" as const,
-          filledQuantity: 0,
-          filledPrice: 0,
-          timestamp: new Date().toISOString(),
-          message: "自动交易执行失败: " + (error instanceof Error ? error.message : "未知错误"),
-        };
+  /** 撤销订单（按本地订单 ID，账户隔离） */
+  cancelOrder: protectedProcedure
+    .input(z.object({ orderId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const service = await requireService();
+      const result = await service.cancelOrder({ userId: ctx.user.id, orderId: input.orderId });
+      if (!result.success) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: result.message });
       }
+      return result;
     }),
+
+  /** 订单列表（本地持久化记录，含状态机状态） */
+  listOrders: protectedProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(500).default(100) }).optional())
+    .query(async ({ ctx, input }) => {
+      const service = await requireService();
+      return service.listOrders(ctx.user.id, input?.limit ?? 100);
+    }),
+
+  /** 对账开放订单（手动触发；调度器也会周期执行） */
+  reconcileOrders: protectedProcedure.mutation(async ({ ctx }) => {
+    const service = await requireService();
+    return service.reconcileOpenOrders(ctx.user.id);
+  }),
+
+  /** 成交历史 */
+  listTrades: protectedProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(500).default(100) }).optional())
+    .query(async ({ ctx, input }) => {
+      const service = await requireService();
+      return service.listTrades(ctx.user.id, input?.limit ?? 100);
+    }),
+
+  /** 当前交易模式（前端展示 paper/live 标识） */
+  getTradingMode: protectedProcedure.query(() => ({
+    mode: isLiveMode() ? ("live" as const) : ("paper" as const),
+  })),
 });

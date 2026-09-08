@@ -11,6 +11,10 @@ export interface BacktestConfig {
   stopLossPercent: number;
   takeProfitPercent: number;
   positionSize: number; // 每个持仓的金额
+  /** 单笔固定佣金（开/平仓各收一次），默认 0 */
+  commissionPerTrade?: number;
+  /** 滑点百分比（对成交不利方向调整），默认 0 */
+  slippagePercent?: number;
 }
 
 export interface BacktestTrade {
@@ -42,6 +46,10 @@ export interface BacktestResult {
   profitFactor: number;
   maxDrawdown: number;
   sharpeRatio: number;
+  /** 基准：同期买入持有收益率（%），用于对比策略是否有超额 */
+  benchmarkReturnPercent: number;
+  /** 总交易成本（佣金+滑点估算） */
+  totalCosts: number;
   trades: BacktestTrade[];
 }
 
@@ -61,33 +69,48 @@ export function runBacktest(
     throw new Error("Price, date, and signal arrays must have the same length");
   }
 
+  const commission = config.commissionPerTrade ?? 0;
+  const slippage = (config.slippagePercent ?? 0) / 100;
+
+  // 成交价 = 信号次日价格 + 对不利方向的滑点（消除同K线前视偏差）
+  const execPrice = (i: number, side: "buy" | "sell"): { price: number; index: number } => {
+    const j = Math.min(i + 1, historicalPrices.length - 1);
+    const raw = historicalPrices[j];
+    return { price: side === "buy" ? raw * (1 + slippage) : raw * (1 - slippage), index: j };
+  };
+
   let capital = config.initialCapital;
+  let totalCosts = 0;
   const trades: BacktestTrade[] = [];
   let position: {
     entryPrice: number;
     entryDate: Date;
     quantity: number;
+    entryCost: number; // 实际投入（含佣金）
   } | null = null;
 
-  // 执行回测
+  // 执行回测（最后一根K线不产生新开仓——无次日价格）
   for (let i = 0; i < historicalPrices.length; i++) {
     const price = historicalPrices[i];
     const date = historicalDates[i];
     const signal = signals[i];
 
-    if (!position && signal === "buy") {
-      // 开仓
-      const quantity = Math.floor(config.positionSize / price);
-      if (quantity > 0 && capital >= config.positionSize) {
+    if (!position && signal === "buy" && i < historicalPrices.length - 1) {
+      const exec = execPrice(i, "buy");
+      const quantity = Math.floor(config.positionSize / exec.price);
+      const cost = quantity * exec.price + commission;
+      if (quantity > 0 && capital >= cost) {
         position = {
-          entryPrice: price,
-          entryDate: date,
+          entryPrice: exec.price,
+          entryDate: historicalDates[exec.index],
           quantity,
+          entryCost: cost,
         };
-        capital -= config.positionSize;
+        capital -= cost;
+        totalCosts += commission + quantity * exec.price * slippage;
       }
     } else if (position) {
-      // 检查止损止盈或卖出信号
+      // 检查止损止盈或卖出信号（按当前价评估，按次日价成交）
       const pnlPercent = ((price - position.entryPrice) / position.entryPrice) * 100;
       const shouldExit =
         signal === "sell" ||
@@ -95,25 +118,27 @@ export function runBacktest(
         pnlPercent >= config.takeProfitPercent;
 
       if (shouldExit) {
-        // 平仓
-        const exitValue = position.quantity * price;
-        const pnl = exitValue - config.positionSize;
+        const exec = execPrice(i, "sell");
+        const exitValue = position.quantity * exec.price - commission;
+        const pnl = exitValue - position.entryCost;
+        const realPnlPercent = (pnl / position.entryCost) * 100;
 
         trades.push({
           entryDate: position.entryDate,
           entryPrice: position.entryPrice,
-          exitDate: date,
-          exitPrice: price,
+          exitDate: historicalDates[exec.index],
+          exitPrice: exec.price,
           quantity: position.quantity,
           side: "buy",
           pnl,
-          pnlPercent,
+          pnlPercent: realPnlPercent,
           holdingDays: Math.floor(
-            (date.getTime() - position.entryDate.getTime()) / (1000 * 60 * 60 * 24)
+            (historicalDates[exec.index].getTime() - position.entryDate.getTime()) / (1000 * 60 * 60 * 24)
           ),
         });
 
         capital += exitValue;
+        totalCosts += commission + position.quantity * exec.price * slippage;
         position = null;
       }
     }
@@ -121,11 +146,11 @@ export function runBacktest(
 
   // 如果还有未平仓的持仓，按最后价格平仓
   if (position) {
-    const lastPrice = historicalPrices[historicalPrices.length - 1];
+    const lastPrice = historicalPrices[historicalPrices.length - 1] * (1 - slippage);
     const lastDate = historicalDates[historicalDates.length - 1];
-    const exitValue = position.quantity * lastPrice;
-    const pnl = exitValue - config.positionSize;
-    const pnlPercent = ((lastPrice - position.entryPrice) / position.entryPrice) * 100;
+    const exitValue = position.quantity * lastPrice - commission;
+    const pnl = exitValue - position.entryCost;
+    const realPnlPercent = (pnl / position.entryCost) * 100;
 
     trades.push({
       entryDate: position.entryDate,
@@ -135,13 +160,14 @@ export function runBacktest(
       quantity: position.quantity,
       side: "buy",
       pnl,
-      pnlPercent,
+      pnlPercent: realPnlPercent,
       holdingDays: Math.floor(
         (lastDate.getTime() - position.entryDate.getTime()) / (1000 * 60 * 60 * 24)
       ),
     });
 
     capital += exitValue;
+    totalCosts += commission + position.quantity * lastPrice * slippage;
   }
 
   // 计算性能指标
@@ -188,6 +214,11 @@ export function runBacktest(
   const stdDev = Math.sqrt(variance);
   const sharpeRatio = stdDev > 0 ? (avgReturn / stdDev) * Math.sqrt(252) : 0; // 年化
 
+  const benchmarkReturnPercent =
+    historicalPrices.length > 1
+      ? ((historicalPrices[historicalPrices.length - 1] - historicalPrices[0]) / historicalPrices[0]) * 100
+      : 0;
+
   return {
     symbol: config.symbol,
     startDate: config.startDate,
@@ -205,6 +236,8 @@ export function runBacktest(
     profitFactor,
     maxDrawdown,
     sharpeRatio,
+    benchmarkReturnPercent,
+    totalCosts,
     trades,
   };
 }

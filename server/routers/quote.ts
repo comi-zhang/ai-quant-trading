@@ -1,83 +1,102 @@
 import { z } from "zod";
-import { publicProcedure, router } from "../_core/trpc";
-import { getRealTimeQuote, getRealTimeQuotes, getKlineData, getAccountAssets, getAccountPositions } from "../services/longbridgeRealtime";
+import { TRPCError } from "@trpc/server";
+import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
+import { getDefaultGateway } from "../services/longbridge/gateway";
+import { GatewayError } from "../services/longbridge/client";
+import { normalizeSymbol } from "../services/longbridge/contract";
+import { getOrderService } from "../services/orderService";
 
-// 股票代码白名单验证
-const ALLOWED_SYMBOLS = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA", "AMD", "INTC", "NFLX"] as const;
+/**
+ * 行情路由
+ * - 行情数据 public（无账户信息），但未配置凭据/上游失败时返回明确错误，绝不返回伪造的 0 值行情；
+ * - 账户资产/持仓 protected，来自本地账本（paper）或券商快照（live）。
+ */
 
-const isAllowedSymbol = (symbol: string) => 
-  ALLOWED_SYMBOLS.includes(symbol.toUpperCase() as typeof ALLOWED_SYMBOLS[number]);
-
-const symbolSchema = z.string().min(1).max(10).refine(isAllowedSymbol, {
-  message: "股票代码不在白名单中",
+const symbolSchema = z.string().min(1).max(20).transform((s, ctx) => {
+  try {
+    return normalizeSymbol(s);
+  } catch {
+    ctx.addIssue({ code: "custom", message: "非法股票代码" });
+    return z.NEVER;
+  }
 });
 
+function toTrpcError(err: unknown): TRPCError {
+  if (err instanceof GatewayError) {
+    const code =
+      err.kind === "AUTH" ? "PRECONDITION_FAILED"
+      : err.kind === "RATE_LIMIT" ? "TOO_MANY_REQUESTS"
+      : err.kind === "UPSTREAM" || err.kind === "NETWORK" ? "BAD_GATEWAY"
+      : "INTERNAL_SERVER_ERROR";
+    return new TRPCError({ code, message: err.message });
+  }
+  return new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: (err as Error).message });
+}
+
 export const quoteRouter = router({
-  /**
-   * 获取单个股票的实时报价
-   */
   getQuote: publicProcedure
     .input(z.object({ symbol: symbolSchema }))
     .query(async ({ input }) => {
-      const quote = await getRealTimeQuote(input.symbol.toUpperCase());
-      return quote || {
-        symbol: input.symbol,
-        lastPrice: 0,
-        openPrice: 0,
-        highPrice: 0,
-        lowPrice: 0,
-        volume: 0,
-        timestamp: Date.now(),
-        change: 0,
-        changePercent: 0,
-      };
+      const gateway = getDefaultGateway();
+      if (!gateway.configured) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "行情服务未配置（缺少 Longbridge 凭据）" });
+      }
+      try {
+        return await gateway.getQuote(input.symbol);
+      } catch (err) {
+        throw toTrpcError(err);
+      }
     }),
 
-  /**
-   * 批量获取多个股票的实时报价
-   */
   getQuotes: publicProcedure
-    .input(z.object({ symbols: z.array(symbolSchema).max(20) }))
+    .input(z.object({ symbols: z.array(symbolSchema).min(1).max(20) }))
     .query(async ({ input }) => {
-      const quotes = await getRealTimeQuotes(input.symbols.map(s => s.toUpperCase()));
-      return quotes;
+      const gateway = getDefaultGateway();
+      if (!gateway.configured) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "行情服务未配置（缺少 Longbridge 凭据）" });
+      }
+      try {
+        return await gateway.getQuotes(input.symbols);
+      } catch (err) {
+        throw toTrpcError(err);
+      }
     }),
 
-  /**
-   * 获取K线数据
-   */
   getKline: publicProcedure
     .input(
       z.object({
         symbol: symbolSchema,
-        period: z.enum(["day", "week", "month", "1m", "5m", "15m", "30m", "60m"]).default("day"),
-        limit: z.number().min(1).max(500).default(100),
+        period: z.enum(["day", "week", "month"]).default("day"),
+        limit: z.number().int().min(1).max(500).default(100),
       })
     )
     .query(async ({ input }) => {
-      const klines = await getKlineData(input.symbol.toUpperCase(), input.period, input.limit);
-      return klines;
+      const gateway = getDefaultGateway();
+      if (!gateway.configured) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "行情服务未配置（缺少 Longbridge 凭据）" });
+      }
+      try {
+        return await gateway.getCandlesticks(input.symbol, input.period, input.limit);
+      } catch (err) {
+        throw toTrpcError(err);
+      }
     }),
 
-  /**
-   * 获取账户资产信息 - 需要认证
-   */
-  getAccountAssets: publicProcedure.query(async () => {
-    const assets = await getAccountAssets();
-    return assets || {
-      totalAssets: 0,
-      availableCash: 0,
-      marketValue: 0,
-      buyingPower: 0,
-      currency: "USD",
-    };
+  /** 账户资产总览（paper=本地账本，live=券商快照；需要登录） */
+  getAccountAssets: protectedProcedure.query(async ({ ctx }) => {
+    const service = await getOrderService();
+    if (!service) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "数据库不可用，无法获取账户资产" });
+    }
+    return service.getAccountOverview(ctx.user.id);
   }),
 
-  /**
-   * 获取账户持仓信息 - 需要认证
-   */
-  getAccountPositions: publicProcedure.query(async () => {
-    const positions = await getAccountPositions();
-    return positions || [];
+  /** 当前持仓（需要登录） */
+  getAccountPositions: protectedProcedure.query(async ({ ctx }) => {
+    const service = await getOrderService();
+    if (!service) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "数据库不可用，无法获取持仓" });
+    }
+    return service.listPositions(ctx.user.id);
   }),
 });
